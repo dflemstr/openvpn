@@ -692,6 +692,17 @@ create_socket_udp6 (const unsigned int flags)
   return sd;
 }
 
+socket_descriptor_t
+create_socket_sctp (int af)
+{
+  socket_descriptor_t sd;
+
+  if ((sd = socket (af, SOCK_STREAM, IPPROTO_SCTP)) < 0)
+    msg (M_ERR, "Cannot create SCTP socket");
+
+  return sd;
+}
+
 static void
 create_socket (struct link_socket *sock)
 {
@@ -720,6 +731,16 @@ create_socket (struct link_socket *sock)
     {
       sock->sd = create_socket_udp6 (sock->sockflags);
       sock->sockflags |= SF_GETADDRINFO_DGRAM;
+    }
+  else if (sock->info.proto == PROTO_SCTPv4_SERVER
+	   || sock->info.proto == PROTO_SCTPv4_CLIENT)
+    {
+      sock->sd = create_socket_sctp (AF_INET);
+    }
+  else if (sock->info.proto == PROTO_SCTPv6_SERVER
+	   || sock->info.proto == PROTO_SCTPv6_CLIENT)
+    {
+      sock->sd = create_socket_sctp (AF_INET6);
     }
   else
     {
@@ -1416,6 +1437,8 @@ link_socket_init_phase1 (struct link_socket *sock,
       ASSERT (accept_from);
       ASSERT (sock->info.proto == PROTO_TCPv4_SERVER
 	      || sock->info.proto == PROTO_TCPv6_SERVER
+	      || sock->info.proto == PROTO_SCTPv4_SERVER
+	      || sock->info.proto == PROTO_SCTPv6_SERVER
 	     );
       ASSERT (!sock->inetd);
       sock->sd = accept_from->sd;
@@ -1474,7 +1497,9 @@ link_socket_init_phase1 (struct link_socket *sock,
   if (sock->inetd)
     {
       ASSERT (sock->info.proto != PROTO_TCPv4_CLIENT
-	      && sock->info.proto != PROTO_TCPv6_CLIENT);
+	      && sock->info.proto != PROTO_TCPv6_CLIENT
+	      && sock->info.proto != PROTO_SCTPv4_CLIENT
+	      && sock->info.proto != PROTO_SCTPv6_CLIENT);
       ASSERT (socket_defined (inetd_socket_descriptor));
       sock->sd = inetd_socket_descriptor;
     }
@@ -1527,7 +1552,9 @@ link_socket_init_phase2 (struct link_socket *sock,
   if (sock->inetd)
     {
       if (sock->info.proto == PROTO_TCPv4_SERVER
-	  || sock->info.proto == PROTO_TCPv6_SERVER) {
+	  || sock->info.proto == PROTO_TCPv6_SERVER
+	  || sock->info.proto == PROTO_SCTPv4_SERVER
+	  || sock->info.proto == PROTO_SCTPv6_SERVER) {
 	/* AF_INET as default (and fallback) for inetd */
 	sock->info.lsa->actual.dest.addr.sa.sa_family = AF_INET;
 #ifdef HAVE_GETSOCKNAME
@@ -1572,7 +1599,9 @@ link_socket_init_phase2 (struct link_socket *sock,
 
       /* TCP client/server */
       if (sock->info.proto == PROTO_TCPv4_SERVER
-	  ||sock->info.proto == PROTO_TCPv6_SERVER)
+	  ||sock->info.proto == PROTO_TCPv6_SERVER
+	  || sock->info.proto == PROTO_SCTPv4_SERVER
+	  || sock->info.proto == PROTO_SCTPv6_SERVER)
 	{
 	  switch (sock->mode)
 	    {
@@ -1608,7 +1637,9 @@ link_socket_init_phase2 (struct link_socket *sock,
 	    }
 	}
       else if (sock->info.proto == PROTO_TCPv4_CLIENT
-	       ||sock->info.proto == PROTO_TCPv6_CLIENT)
+	       ||sock->info.proto == PROTO_TCPv6_CLIENT
+	       || sock->info.proto == PROTO_SCTPv4_CLIENT
+	       || sock->info.proto == PROTO_SCTPv6_CLIENT)
 	{
 
 #ifdef GENERAL_PROXY_SUPPORT
@@ -2440,6 +2471,12 @@ static const struct proto_names proto_names[PROTO_N] = {
   {"tcp6-server","TCPv6_SERVER",0,1, AF_INET6},
   {"tcp6-client","TCPv6_CLIENT",0,1, AF_INET6},
   {"tcp6"       ,"TCPv6",0,1, AF_INET6},
+  {"sctp-server","SCTPv4_SERVER",0,1, AF_INET},
+  {"sctp-client","SCTPv4_CLIENT",0,1, AF_INET},
+  {"sctp",       "SCTPv4",0,1, AF_INET},
+  {"sctp6-server","SCTPv6_SERVER",0,1, AF_INET6},
+  {"sctp6-client","SCTPv6_CLIENT",0,1, AF_INET6},
+  {"sctp6",      "SCTPv6",0,1, AF_INET6},
 };
 
 bool
@@ -2577,6 +2614,10 @@ proto_remote (int proto, bool remote)
       case PROTO_TCPv4_CLIENT: return PROTO_TCPv4_SERVER;
       case PROTO_TCPv6_SERVER: return PROTO_TCPv4_CLIENT;
       case PROTO_TCPv6_CLIENT: return PROTO_TCPv4_SERVER;
+      case PROTO_SCTPv4_SERVER: return PROTO_SCTPv4_CLIENT;
+      case PROTO_SCTPv4_CLIENT: return PROTO_SCTPv4_SERVER;
+      case PROTO_SCTPv6_SERVER: return PROTO_SCTPv4_CLIENT;
+      case PROTO_SCTPv6_CLIENT: return PROTO_SCTPv4_SERVER;
       case PROTO_UDPv6: return PROTO_UDPv4;
       }
     }
@@ -2586,6 +2627,8 @@ proto_remote (int proto, bool remote)
       {
       case PROTO_TCPv6_SERVER: return PROTO_TCPv4_SERVER;
       case PROTO_TCPv6_CLIENT: return PROTO_TCPv4_CLIENT;
+      case PROTO_SCTPv6_SERVER: return PROTO_SCTPv4_SERVER;
+      case PROTO_SCTPv6_CLIENT: return PROTO_SCTPv4_CLIENT;
       case PROTO_UDPv6: return PROTO_UDPv4;
       }
     }
